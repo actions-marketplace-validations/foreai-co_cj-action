@@ -30,14 +30,14 @@ class RunnerTests(unittest.TestCase):
             "INPUT_PARAMS_OVERRIDE": '"foo": "bar"',  # invalid JSON
             "INPUT_SERVICE_ACCOUNT_KEY": "test_key",
         }, clear=True):
-            result, msg = runner_module.run(requests.Session())
+            result, msg, _ = runner_module.run(requests.Session())
             self.assertFalse(result)
             self.assertIn("Failed: Invalid JSON in params_override", msg)
 
     def test_no_login_on_invalid_service_account_key(self):
         """Test that the runner module returns an error when the service account key is invalid."""
         with patch.dict(os.environ, {}, clear=True):
-            result, msg = runner_module.run(requests.Session())
+            result, msg, _ = runner_module.run(requests.Session())
             self.assertFalse(result)
             self.assertEqual(msg, "Failed: Service account key should be provided.")
 
@@ -54,7 +54,7 @@ class RunnerTests(unittest.TestCase):
 
         with patch.dict(os.environ, {"INPUT_SERVICE_ACCOUNT_KEY": "test_key"}, clear=True):
             with patch.object(session, "post", return_value=FakeResponse()):
-                result, msg = runner_module.run(session)
+                result, msg, _ = runner_module.run(session)
                 self.assertFalse(result)
                 self.assertEqual(msg, "Failed to login service account.")
 
@@ -75,7 +75,9 @@ class RunnerTests(unittest.TestCase):
                 )
                 self.method = method
                 self.path_spec = (
-                    openapi_spec["paths"][self.url_path_with_placeholder][method.lower()]
+                    openapi_spec.get("paths", {})
+                    .get(self.url_path_with_placeholder, {})
+                    .get(method.lower())
                 )
 
             def json(self):
@@ -108,7 +110,7 @@ class RunnerTests(unittest.TestCase):
 
         def fake_post(url, json=None, **kwargs):
             if url == f"{runner_module.BACKEND_URL}/test-run/test-case-id":
-                schema = openapi_spec["components"]["schemas"]["TestRun-Input"]
+                schema = openapi_spec["components"]["schemas"]["SubmitTestRunRequest"]
                 for field in json:
                     self.assertIn(
                         field,
@@ -129,7 +131,7 @@ class RunnerTests(unittest.TestCase):
         }, clear=True):
             with patch.object(session, "post", side_effect=fake_post):
                 with patch.object(session, "get", side_effect=fake_get):
-                    result, msg = runner_module.run(session)
+                    result, msg, _ = runner_module.run(session)
                     self.assertTrue(result)
                     self.assertEqual(msg, "Test passed!")
 
@@ -149,7 +151,9 @@ class RunnerTests(unittest.TestCase):
                 )
                 self.method = method
                 self.path_spec = (
-                    openapi_spec["paths"][self.url_path_with_placeholder][method.lower()]
+                    openapi_spec.get("paths", {})
+                    .get(self.url_path_with_placeholder, {})
+                    .get(method.lower())
                 )
 
             def json(self):
@@ -163,18 +167,18 @@ class RunnerTests(unittest.TestCase):
                         "test_suite_id": "project-id",
                         "linked_runs": [
                             {
-                                "id": "test-run-id",
+                                "_id": "test-run-id",
                                 "status": "passed",
                                 "created_at": "2025-01-01T00:00:00Z",
                             },
                             {
-                                "id": "test-run-id-2",
+                                "_id": "test-run-id-2",
                                 "status": "failed",
                                 "created_at": "2025-01-01T00:00:00Z",
                             },
                             # Run at different time.
                             {
-                                "id": "test-run-id-3",
+                                "_id": "test-run-id-3",
                                 "status": "passed",
                                 "created_at": "2026-01-01T00:00:01Z",
                             },
@@ -210,7 +214,7 @@ class RunnerTests(unittest.TestCase):
         }, clear=True):
             with patch.object(session, "post", side_effect=fake_post):
                 with patch.object(session, "get", side_effect=fake_get):
-                    result, msg = runner_module.run(session)
+                    result, msg, _ = runner_module.run(session)
                     self.assertFalse(result)
                     self.assertIn("1 passed, 1 failed", msg)
                     self.assertIn(
